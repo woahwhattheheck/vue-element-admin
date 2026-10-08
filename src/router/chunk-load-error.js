@@ -16,17 +16,27 @@ export function isChunkLoadError(error) {
 
 export function shouldReloadForChunkLoadError({
   href = window.location.href,
-  storage = window.sessionStorage,
+  storage,
   now = Date.now()
 } = {}) {
-  if (!storage) {
-    return true
+  let storedReload
+
+  try {
+    if (typeof storage === 'undefined') {
+      storage = window.sessionStorage
+    }
+    if (!storage) {
+      return false
+    }
+    storedReload = storage.getItem(chunkLoadErrorReloadKey)
+  } catch (error) {
+    return false
   }
 
   let previousReload
 
   try {
-    previousReload = JSON.parse(storage.getItem(chunkLoadErrorReloadKey) || 'null')
+    previousReload = JSON.parse(storedReload || 'null')
   } catch (error) {
     previousReload = null
   }
@@ -40,17 +50,18 @@ export function shouldReloadForChunkLoadError({
   }
 
   try {
-    storage.setItem(chunkLoadErrorReloadKey, JSON.stringify({ href, time: now }))
+    const marker = JSON.stringify({ href, time: now })
+    storage.setItem(chunkLoadErrorReloadKey, marker)
+    return storage.getItem(chunkLoadErrorReloadKey) === marker
   } catch (error) {
-    // Ignore storage failures; a single reload is still the best recovery path.
+    // Without a retained marker, automatic reloads could repeat indefinitely.
+    return false
   }
-
-  return true
 }
 
 export function handleChunkLoadError(error, {
   href = window.location.href,
-  storage = window.sessionStorage,
+  storage,
   reload = window.location.replace.bind(window.location),
   now = Date.now()
 } = {}) {
